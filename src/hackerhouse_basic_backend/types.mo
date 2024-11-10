@@ -66,4 +66,17 @@ module Types {
         http_request : HttpRequestArgs -> async HttpResponsePayload;
     };
 
+    public type Error = {
+        #NotFound;
+        #AlreadyExists;
+        #NotAuthorized;
+        #BalanceNotEnough;
+    };
+
+    public type Success = {
+        #Success;
+    };
+
+
+
 };

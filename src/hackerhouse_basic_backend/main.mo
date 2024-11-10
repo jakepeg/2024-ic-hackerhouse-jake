@@ -4,24 +4,101 @@ import Result "mo:base/Result";
 import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Text "mo:base/Text";
+import Principal "mo:base/Principal";
 import Cycles "mo:base/ExperimentalCycles";
+import Map "mo:map/Map";
+import { phash; nhash } "mo:map/Map";
+import Vector "mo:vector";
+import { JSON } "mo:serde";
 
 actor {
+
+    stable var anonId : Text = "2vxsx-fae";
+    stable var autoIndex = 0;
+    let userIdMap = Map.new<Principal, Nat>();
+    let userProfileMap = Map.new<Nat, Text>();
+    let userResultMap = Map.new<Nat, Vector.Vector<Text>>();
+
     public query ({ caller }) func getUserProfile() : async Result.Result<{ id : Nat; name : Text }, Text> {
-        return #ok({ id = 123; name = "test" });
+        // if (Principal.toText(caller) == anonId) {
+        //     return #err("User is not authenticated");
+        // };
+
+        let id = switch(Map.get(userIdMap, phash, caller)) {
+            case (?found) found;
+            case (_) { return #err("User not found")}
+        };
+        let name = switch(Map.get(userProfileMap, nhash, id)){
+            case (?found) found;
+            case (_) { return #err("User not found")}
+        };
+
+        return #ok({ id = id; name = name });
     };
 
     public shared ({ caller }) func setUserProfile(name : Text) : async Result.Result<{ id : Nat; name : Text }, Text> {
-        return #ok({ id = 123; name = "test" });
+        // if (Principal.toText(caller) == anonId) {
+        //     return #err("User is not authenticated");
+        // };
+
+        let foundUser = Map.get(userIdMap, phash, caller);
+        switch (foundUser) {
+            case (?_x) {};
+            case (_) {
+                Map.set(userIdMap, phash, caller, autoIndex);
+                autoIndex += 1;
+            };
+        };
+
+        let id = switch(Map.get(userIdMap, phash, caller)) {
+            case (?found) found;
+            case (_) { return #err("User not found")}
+        };
+
+        Map.set(userProfileMap, nhash, id, name);
+        
+        return #ok({ id = id; name = name });
     };
 
     public shared ({ caller }) func addUserResult(result : Text) : async Result.Result<{ id : Nat; results : [Text] }, Text> {
-        return #ok({ id = 123; results = ["fake result"] });
+        // if (Principal.toText(caller) == anonId) {
+        //     return #err("User is not authenticated");
+        // };
+
+        let id = switch(Map.get(userIdMap, phash, caller)) {
+            case (?found) found;
+            case (_) { return #err("User not found")}
+        };
+
+        let results = switch(Map.get(userResultMap, nhash, id)) {
+            case (?found) found;
+            case (_) Vector.new<Text>();
+        };
+
+        Vector.add(results, result);
+        Map.set(userResultMap, nhash, id, results);
+
+        return #ok({ id = id; results = Vector.toArray(results) });
     };
 
     public query ({ caller }) func getUserResults() : async Result.Result<{ id : Nat; results : [Text] }, Text> {
-        return #ok({ id = 123; results = ["fake result"] });
+        // if (Principal.toText(caller) == anonId) {
+        //     return #err("User is not authenticated");
+        // };
+
+        let id = switch(Map.get(userIdMap, phash, caller)) {
+            case (?found) found;
+            case (_) { return #err("User not found")}
+        };
+
+        let results = switch(Map.get(userResultMap, nhash, id)) {
+            case (?found) found;
+            case (_) Vector.new<Text>();
+        };
+
+        return #ok({ id = id; results = Vector.toArray(results) });
     };
+
 
     public func outcall_ai_model_for_sentiment_analysis(paragraph : Text) : async Result.Result<{ paragraph : Text; result : Text }, Text> {
         let host = "api-inference.huggingface.co";
@@ -111,7 +188,7 @@ actor {
             url = url;
             max_response_bytes = null; //optional for request
             headers = request_headers;
-            // note: type of `body` is ?[Nat8] so it is passed here as "?request_body_as_nat8" instead of "request_body_as_nat8"
+            // note: type of body is ?[Nat8] so it is passed here as "?request_body_as_nat8" instead of "request_body_as_nat8"
             body = ?request_body_as_nat8;
             method = #post;
             transform = ?transform_context;
@@ -134,7 +211,7 @@ actor {
 
         //5. DECODE THE RESPONSE
 
-        //As per the type declarations in `src/Types.mo`, the BODY in the HTTP response
+        //As per the type declarations in src/Types.mo, the BODY in the HTTP response
         //comes back as [Nat8s] (e.g. [2, 5, 12, 11, 23]). Type signature:
 
         //public type HttpResponsePayload = {
